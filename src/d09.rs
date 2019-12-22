@@ -10,7 +10,7 @@ pub fn process(input: String) {
 
     let (send_h, recv_c) = channel();
     let (send_c, recv_h) = channel();
-    let _ = send_h.send(1);
+    let _ = send_h.send(2);
     {
         let mut comp = IntcodeComputer::new(num_vec.as_slice(), recv_c, send_c, false);
 //        comp.add_watch(100);
