@@ -1,31 +1,31 @@
-use std::process::exit;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::channel;
+use std::thread;
 
 use crate::intcode_computer::IntcodeComputer;
 
 pub fn process(input: Vec<&str>) {
     let tmp = input.join("");
     let numbers: Vec<&str> = tmp.split(',').collect();
-    let num_vec: Vec<i32> = numbers.iter().map(|x| -> i32 { x.parse().expect("") }).collect();
+    let num_vec: Vec<i64> = numbers.iter().map(|x| -> i64 { x.parse().expect("") }).collect();
 
     let mut highest = 0;
-    for a in 0..5 {
-        for b in 0..5 {
-            for c in 0..5 {
-                for d in 0..5 {
-                    'outer: for e in 0..5 {
+    for a in 5..=9 {
+        for b in 5..=9 {
+            for c in 5..=9 {
+                for d in 5..=9 {
+                    'outer: for e in 5..=9 {
+                        // deduplicate
                         let mut arr = vec![0; 5];
-                        arr[a as usize] += 1;
-                        arr[b as usize] += 1;
-                        arr[c as usize] += 1;
-                        arr[d as usize] += 1;
-                        arr[e as usize] += 1;
+                        arr[a as usize - 5] += 1;
+                        arr[b as usize - 5] += 1;
+                        arr[c as usize - 5] += 1;
+                        arr[d as usize - 5] += 1;
+                        arr[e as usize - 5] += 1;
                         for number in arr {
                             if number > 1 {
                                 continue 'outer;
                             }
                         }
-
 
                         let (send_h, recv_a) = channel();
                         let (send_a, recv_b) = channel();
@@ -39,12 +39,28 @@ pub fn process(input: Vec<&str>) {
                         let _ = send_c.send(d); // phase
                         let _ = send_d.send(e); // phase
                         let _ = send_h.send(0); // init input
-                        IntcodeComputer::new(num_vec.as_slice(), recv_a, send_a, false).run();
-                        IntcodeComputer::new(num_vec.as_slice(), recv_b, send_b, false).run();
-                        IntcodeComputer::new(num_vec.as_slice(), recv_c, send_c, false).run();
-                        IntcodeComputer::new(num_vec.as_slice(), recv_d, send_d, false).run();
-                        IntcodeComputer::new(num_vec.as_slice(), recv_e, send_e, false).run();
-                        let result = recv_h.recv().unwrap();
+
+                        let mut computer_a = IntcodeComputer::new(num_vec.as_slice(), recv_a, send_a, false);
+                        let mut computer_b = IntcodeComputer::new(num_vec.as_slice(), recv_b, send_b, false);
+                        let mut computer_c = IntcodeComputer::new(num_vec.as_slice(), recv_c, send_c, false);
+                        let mut computer_d = IntcodeComputer::new(num_vec.as_slice(), recv_d, send_d, false);
+                        let mut computer_e = IntcodeComputer::new(num_vec.as_slice(), recv_e, send_e, false);
+                        thread::spawn(move || { computer_a.run() });
+                        thread::spawn(move || { computer_b.run() });
+                        thread::spawn(move || { computer_c.run() });
+                        thread::spawn(move || { computer_d.run() });
+                        let handle = thread::spawn(move || { computer_e.run() });
+                        let mut result = 0;
+                        loop {
+                            if let Ok(data) = recv_h.recv() {
+                                result = data;
+//                                println!("Output: {}", data);
+                                let _ = send_h.send(data);
+                            } else {
+                                break;
+                            }
+                        }
+                        let _ = handle.join();
                         if result > highest {
                             println!("{} -> {}", highest, result);
                             println!("{} {} {} {} {}", a, b, c, d, e);
@@ -56,14 +72,4 @@ pub fn process(input: Vec<&str>) {
         }
     }
     println!("Result: {}", highest);
-}
-
-fn print_channel(recv: &Receiver<i32>) {
-    loop {
-        if let Ok(data) = recv.recv() {
-            println!("Output: {}", data);
-        } else {
-            break;
-        }
-    }
 }
