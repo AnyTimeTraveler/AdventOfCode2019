@@ -3,10 +3,10 @@ use std::fs;
 #[allow(dead_code)]
 mod intcode_computer;
 
-mod d11;
+mod d13;
 
 fn main() {
-    let input = fs::read_to_string("input/11").expect("Error");
+    let input = fs::read_to_string("input/13").expect("Error");
 //    let lines = input.split("\n").collect();
-    d11::process(input);
+    d13::process(input);
 }

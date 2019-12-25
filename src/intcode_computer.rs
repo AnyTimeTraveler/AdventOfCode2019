@@ -24,7 +24,7 @@ struct State {
     halt: bool,
     input: Receiver<i64>,
     output: Sender<i64>,
-    debug: bool,
+    debug_output: Option<Sender<String>>,
 }
 
 struct Instruction {
@@ -39,7 +39,7 @@ struct Watch {
 }
 
 impl IntcodeComputer {
-    pub fn new(program: &[i64], input: Receiver<i64>, output: Sender<i64>, debug: bool) -> IntcodeComputer {
+    pub fn new(program: &[i64], input: Receiver<i64>, output: Sender<i64>, debug_output: Option<Sender<String>>) -> IntcodeComputer {
         let mut memory = vec![0; program.len()];
         memory.copy_from_slice(&program[..]);
 
@@ -53,7 +53,7 @@ impl IntcodeComputer {
                 halt: false,
                 input,
                 output,
-                debug,
+                debug_output,
             },
             watches: Vec::new(),
         }
@@ -61,8 +61,8 @@ impl IntcodeComputer {
     pub fn step(&mut self) {
         self.state.param_modes = decode_params(self.memory[self.state.ip]);
         if let Some(ins) = self.instructions.get(decode_instruction(self.memory[self.state.ip])) {
-            if self.state.debug {
-                println!("{}: {}", self.state.ip, ins.name);
+            if let Some(log) = &self.state.debug_output {
+                let _ = log.send(format!("{}: {}\n", self.state.ip, ins.name));
             }
             (ins.exec)(&mut self.state, &mut self.memory);
             self.state.ip += ins.ip_change;
@@ -112,22 +112,24 @@ fn get<'a>(state: &State, mem: &'a mut Vec<i64>, pos: usize) -> &'a mut i64 {
         AddressMode::IMMEDIATE => mem.get_mut(state.ip + pos).unwrap(),
         AddressMode::ABSOLUTE => {
             let position = mem[state.ip + pos] as usize;
-            fit_memory(mem, position, state.debug);
+            fit_memory(mem, position, &state.debug_output);
             mem.get_mut(position).unwrap()
         }
         AddressMode::RELATIVE => {
             let mut position = mem[state.ip + pos];
             position += state.relative_base as i64;
             let position = position as usize;
-            fit_memory(mem, position, state.debug);
+            fit_memory(mem, position, &state.debug_output);
             mem.get_mut(position).unwrap()
         }
     }
 }
 
-fn fit_memory(mem: &mut Vec<i64>, position: usize, debug: bool) {
-    if debug && mem.len() <= position {
-        println!("Memory too small, extending from {} to {}", mem.len(), position);
+fn fit_memory(mem: &mut Vec<i64>, position: usize, debug: &Option<Sender<String>>) {
+    if mem.len() <= position {
+        if let Some(debug) = &debug {
+            let _ = debug.send(format!("Memory too small, extending from {} to {}\n", mem.len(), position));
+        }
     }
     while mem.len() <= position {
         mem.push(0);
